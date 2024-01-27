@@ -124,22 +124,25 @@ print(f"Мінімальна сума угоди для продавця з ID {
 # Ідентифікатор конкретного покупця
 specific_customer_id = 1  # Замініть на ідентифікатор покупця, якого ви шукаєте
 
-# Запит для витягування максимальної суми угоди для конкретного покупця
-max_amount_query = func.max(Sale.amount).filter(Sale.customer_id == specific_customer_id)
-max_amount = session.query(max_amount_query).scalar()
+from sqlalchemy import func
+
+# Запит для витягування ID продавця з максимальною сумою продажів
+max_salesman_query = session.query(Sale.salesman_id, func.sum(Sale.amount).label('total_sales')) \
+    .group_by(Sale.salesman_id) \
+    .order_by(func.sum(Sale.amount).desc()) \
+    .limit(1)
+
+# Виконання запиту та отримання результату
+max_salesman_result = max_salesman_query.first()
+
+if max_salesman_result:
+    max_salesman_id, total_sales = max_salesman_result
+    print(f"Продавець з максимальною сумою продажів (ID {max_salesman_id}): {total_sales}")
+else:
+    print("Інформація не знайдена.")
 
 # Виведення результату
 print(f"Максимальна сума угоди для покупця з ID {specific_customer_id}: {max_amount}")
-
-# Ідентифікатор конкретного покупця
-specific_customer_id = 1  # Замініть на ідентифікатор покупця, якого ви шукаєте
-
-# Запит для витягування мінімальної суми угоди для конкретного покупця
-min_amount_query = func.min(Sale.amount).filter(Sale.customer_id == specific_customer_id)
-min_amount = session.query(min_amount_query).scalar()
-
-# Виведення результату
-print(f"Мінімальна сума угоди для покупця з ID {specific_customer_id}: {min_amount}")
 
 
 
