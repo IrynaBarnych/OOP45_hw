@@ -161,6 +161,24 @@ if min_salesman_result:
 else:
     print("Інформація не знайдена.")
 
+from sqlalchemy import func
+
+# Запит для витягування ID покупця з максимальною сумою покупок
+max_customer_query = session.query(Sale.customer_id, func.sum(Sale.amount).label('total_purchases')) \
+    .group_by(Sale.customer_id) \
+    .order_by(func.sum(Sale.amount).desc()) \
+    .limit(1)
+
+# Виконання запиту та отримання результату
+max_customer_result = max_customer_query.first()
+
+if max_customer_result:
+    max_customer_id, total_purchases = max_customer_result
+    print(f"Покупець з максимальною сумою покупок (ID {max_customer_id}): {total_purchases}")
+else:
+    print("Інформація не знайдена.")
+
+
 
 # Залишаємо консоль відкритою, очікуючи введення користувача
 input("Натисніть Enter для завершення...")
