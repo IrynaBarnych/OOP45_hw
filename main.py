@@ -1,6 +1,12 @@
-from sqlalchemy import create_engine, Column, Integer, String, Sequence, Date, ForeignKey
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship
-from sqlalchemy import select, func
+# Завдання 2
+# Додайте механізми для оновлення, видалення та вставки
+# даних до бази даних за допомогою інтерфейсу меню. Користувач не може ввести запити INSERT, UPDATE, DELETE
+# безпосередньо. Забороніть можливість оновлення та видалення
+# усіх даних для кожної таблиці (UPDATE та DELETE без умов).
+
+from sqlalchemy import create_engine, MetaData, Table, insert, update, delete
+from sqlalchemy.sql import select
+import psycopg2
 import json
 
 # Зчитування конфігураційних даних з файлу
@@ -11,85 +17,99 @@ with open('config.json') as f:
 db_user = config['user']
 db_password = config['password']
 
-# З'єднання з базою даних
-db_url = f'postgresql+psycopg2://{db_user}:{db_password}@localhost:5432/Sales'
+db_url = f'postgresql+psycopg2://{db_user}:{db_password}@localhost:5432/Hospital'
 engine = create_engine(db_url)
+# з'єднання з БД
+conn = engine.connect()
+metadata = MetaData()
+# завантаження таблиць
+# автоматичне завантаження
+metadata.reflect(bind=engine)
+# або одна табличка
+# departments = Table('departments', metadata, autoload=True, autoload_with=engine)
 
-# Оголошення базового класу
-Base = declarative_base()
+# Нова функція для перевірки чи є умова для UPDATE та DELETE
+def is_condition_needed(table):
+    columns = table.columns.keys()
+    print("Доступні колонки для визначення умови: ")
+    for idx, column in enumerate(columns, start=1):
+        print(f"{idx}.{column}")
+    selected_column_idx = int(input("Введіть номер колонки для умови: "))
 
-# Оголошення моделі для таблиці Sales
-class Sale(Base):
-    __tablename__ = 'sales'
+    if 1 <= selected_column_idx <= len(columns):
+        condition_column = columns[selected_column_idx - 1]
+    else:
+        print("Невірний номер колонки! Визначення умови відмінено!")
+        return False
 
-    id = Column(Integer, Sequence('sale_id_seq'), primary_key=True)
-    amount = Column(Integer)
-    date = Column(Date)
-    salesman_id = Column(Integer, ForeignKey('salesmen.id'))
-    customer_id = Column(Integer, ForeignKey('customers.id'))
+    condition_value = input(f"Введіть значення для умови, {condition_column}: ")
+    return True, condition_column, condition_value
 
-# Оголошення моделі для таблиці Salesmen
-class Salesman(Base):
-    __tablename__ = 'salesmen'
+def insert_row(table: metadata):
+    columns = table.columns.keys()
 
-    id = Column(Integer, Sequence('salesman_id_seq'), primary_key=True)
-    name = Column(String(50))
-    contact_number = Column(String(15))
-    sales = relationship('Sale', back_populates='salesman')
+    values = {}
+    for column in columns:
+        value = input(f"Введіть значення для колонки {column}: ")
+        values[column] = value
+    query = insert(table).values(values)
+    conn.execute(query)
+    conn.commit()
 
-# Оголошення моделі для таблиці Customers
-class Customer(Base):
-    __tablename__ = 'customers'
+    print("Рядок успішно додано!")
 
-    id = Column(Integer, Sequence('customer_id_seq'), primary_key=True)
-    name = Column(String(50))
-    email = Column(String(50))
-    address = Column(String(100))
-    sales = relationship('Sale', back_populates='customer')
+def update_rows(table):
+    condition_needed, condition_column, condition_value = is_condition_needed(table)
+    if condition_needed:
+        new_values = {}
+        columns = table.columns.keys()
+        for column in columns:
+            value = input(f"Введіть значення для колонки {column}: ")
+            new_values[column] = value
 
-# Встановлення зв'язку між Sale та Salesman/Customer
-Sale.salesman = relationship('Salesman', back_populates='sales')
-Sale.customer = relationship('Customer', back_populates='sales')
+        confirm_update = input("Оновити усі рядки? у/п? ")
+        if confirm_update.lower() == 'y':
+            query = update(table).where(getattr(table.c, condition_column) == condition_value).values(new_values)
+            conn.execute(query)
+            conn.commit()
 
-# Створення таблиць у базі даних
-Base.metadata.create_all(engine)
+def delete_rows(table):
+    condition_needed, condition_column, condition_value = is_condition_needed(table)
+    if condition_needed:
+        confirm_update = input("Видалити усі рядки з цієї таблиці? у/п? ")
+        if confirm_update.lower() == 'y':
+            query = delete(table).where(getattr(table.c, condition_column) == condition_value)
+            conn.execute(query)
+            conn.commit()
 
-# Створення сесії для взаємодії з базою даних
-Session = sessionmaker(bind=engine)
-session = Session()
+while True:
+    print("Оберіть таблицю: ")
+    for table_name in metadata.tables.keys():
+        print(table_name)
+    table_name = input("Введіть назву таблиці або 0, щоб вийти ")
+    if table_name == '0':
+        break
+    # перевіримо, чи існує таблиця
+    if table_name in metadata.tables:
+        table = metadata.tables[table_name]
+        print(f"Ви обрали таблицю {table_name}")
 
-# Запит для витягування усіх угод
-all_sales_query = select(Sale)
-all_sales_result = session.execute(all_sales_query).fetchall()
-print("\nВсі угоди:")
-for sale in all_sales_result:
-    print(f"ID: {sale.id}, Amount: {sale.amount}, Date: {sale.date}, Salesman ID: {sale.salesman_id}, Customer ID: {sale.customer_id}")
+        print("1. Вставити рядки")
+        print("2. Оновити рядки")
+        print("3. Видалити рядки")
+        print("0. Вийти")
 
-# Запит для витягування ID продавця з максимальною сумою продажів
-max_salesman_query = session.query(Sale.salesman_id, func.sum(Sale.amount).label('total_sales')) \
-    .group_by(Sale.salesman_id) \
-    .order_by(func.sum(Sale.amount).desc()) \
-    .limit(1)
+        choice = input("Оберіть опцію: ")
 
-# Виконання запиту та отримання результату
-max_salesman_result = max_salesman_query.first()
-
-if max_salesman_result:
-    max_salesman_id, total_sales = max_salesman_result
-    print(f"\nПродавець з максимальною сумою продажів (ID {max_salesman_id}): {total_sales}")
-else:
-    print("\nІнформація не знайдена.")
-
-# Виведення результату
-print("\nМаксимальна сума угоди:")
-max_amount_query = func.max(Sale.amount)
-max_amount_result = session.query(max_amount_query).scalar()
-print(f"Максимальна сума угоди: {max_amount_result}")
-
-# Додайте інші звіти за аналогією для решти запитів, які ви хочете реалізувати.
-
-# Закриття сесії
-session.close()
-
-# Залишаємо консоль відкритою, очікуючи введення користувача
-input("\nНатисніть Enter для завершення...")
+        if choice == "1":
+            insert_row(table)
+        elif choice == "2":
+            update_rows(table)
+        elif choice == "3":
+            delete_rows(table)
+        elif choice == "0":
+            break
+        else:
+            print("Невірний вибір. Будь ласка, оберіть знову.")
+    else:
+        print("Такої таблиці не існує. Будь ласка, введіть правильну назву.")
