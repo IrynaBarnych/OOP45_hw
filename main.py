@@ -196,6 +196,24 @@ if avg_purchase_result:
 else:
     print("Інформація не знайдена.")
 
+from sqlalchemy import func
+
+# Ідентифікатор конкретного продавця
+specific_salesman_id = 1  # Замініть на ідентифікатор продавця, для якого ви шукаєте середню суму покупок
+
+# Запит для витягування середньої суми покупок для конкретного продавця
+avg_purchase_query = session.query(func.avg(Sale.amount).label('avg_purchase')) \
+    .filter(Sale.salesman_id == specific_salesman_id)
+
+# Виконання запиту та отримання результату
+avg_purchase_result = avg_purchase_query.first()
+
+if avg_purchase_result:
+    avg_purchase = avg_purchase_result[0]
+    print(f"Середня сума покупок для продавця (ID {specific_salesman_id}): {avg_purchase}")
+else:
+    print("Інформація не знайдена.")
+
 
 # Залишаємо консоль відкритою, очікуючи введення користувача
 input("Натисніть Enter для завершення...")
