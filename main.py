@@ -70,6 +70,19 @@ for sale in result:
 # Закриття сесії
 session.close()
 
+# Ідентифікатор конкретного продавця
+specific_salesman_id = 1  # Замініть на ідентифікатор продавця, якого ви шукаєте
+
+# Запит для витягування угод конкретного продавця
+query = select(Sale).where(Sale.salesman_id == specific_salesman_id)
+result = session.execute(query).fetchall()
+
+# Виведення результатів
+for sale in result:
+    print(f"ID: {sale.id}, Amount: {sale.amount}, Date: {sale.date}, Salesman ID: {sale.salesman_id}, "
+          f"Customer ID: {sale.customer_id}")
+
+
 # Залишаємо консоль відкритою, очікуючи введення користувача
 input("Натисніть Enter для завершення...")
 
