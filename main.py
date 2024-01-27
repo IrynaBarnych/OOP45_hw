@@ -4,10 +4,11 @@
 # безпосередньо. Забороніть можливість оновлення та видалення
 # усіх даних для кожної таблиці (UPDATE та DELETE без умов).
 
-from sqlalchemy import create_engine, MetaData, Table, insert, update, delete
-from sqlalchemy.sql import select
-import psycopg2
+from sqlalchemy import create_engine, MetaData, Table, insert, update, delete, select
+from sqlalchemy.sql import text
+from sqlalchemy.exc import SQLAlchemyError
 import json
+from datetime import datetime
 
 # Зчитування конфігураційних даних з файлу
 with open('config.json') as f:
@@ -19,50 +20,44 @@ db_password = config['password']
 
 db_url = f'postgresql+psycopg2://{db_user}:{db_password}@localhost:5432/Hospital'
 engine = create_engine(db_url)
-# з'єднання з БД
+# З'єднання з БД
 conn = engine.connect()
 metadata = MetaData()
-# завантаження таблиць
-# автоматичне завантаження
+# Завантаження таблиць
 metadata.reflect(bind=engine)
-# або одна табличка
-# departments = Table('departments', metadata, autoload=True, autoload_with=engine)
 
-# Нова функція для перевірки чи є умова для UPDATE та DELETE
-def is_condition_needed(table):
-    columns = table.columns.keys()
-    print("Доступні колонки для визначення умови: ")
-    for idx, column in enumerate(columns, start=1):
-        print(f"{idx}.{column}")
-    selected_column_idx = int(input("Введіть номер колонки для умови: "))
+def insert_row(table):
+    try:
+        columns = table.columns.keys()
 
-    if 1 <= selected_column_idx <= len(columns):
-        condition_column = columns[selected_column_idx - 1]
-    else:
-        print("Невірний номер колонки! Визначення умови відмінено!")
-        return False
+        values = {}
+        for col in columns:
+            value = input(f"Введіть значення для колонки {col}: ")
+            values[col] = value
 
-    condition_value = input(f"Введіть значення для умови, {condition_column}: ")
-    return True, condition_column, condition_value
+        query = insert(table).values(values)
+        conn.execute(query)
+        conn.commit()
 
-def insert_row(table: metadata):
-    columns = table.columns.keys()
-
-    values = {}
-    for column in columns:
-        value = input(f"Введіть значення для колонки {column}: ")
-        values[column] = value
-    query = insert(table).values(values)
-    conn.execute(query)
-    conn.commit()
-
-    print("Рядок успішно додано!")
+        print("Рядок успішно додано!")
+    except SQLAlchemyError as e:
+        print(f"Помилка при вставці рядка: {e}")
 
 def update_rows(table):
-    condition_needed, condition_column, condition_value = is_condition_needed(table)
-    if condition_needed:
-        new_values = {}
+    try:
         columns = table.columns.keys()
+        print("Доступні колонки для оновлення: ")
+        for idx, column in enumerate(columns, start=1):
+            print(f"{idx}.{column}")
+        selected_column_idx = int(input("Введіть номер колонки для оновлення: "))
+
+        if 1 <= selected_column_idx <= len(columns):
+            condition_column = columns[selected_column_idx - 1]
+        else:
+            print("Невірний номер колонки!")
+
+        condition_value = input(f"Введіть значення для умови, {condition_column}: ")
+        new_values = {}
         for column in columns:
             value = input(f"Введіть значення для колонки {column}: ")
             new_values[column] = value
@@ -73,23 +68,54 @@ def update_rows(table):
             conn.execute(query)
             conn.commit()
 
+            print("Рядки успішно оновлено!")
+    except SQLAlchemyError as e:
+        print(f"Помилка при оновленні рядків: {e}")
+
 def delete_rows(table):
-    condition_needed, condition_column, condition_value = is_condition_needed(table)
-    if condition_needed:
-        confirm_update = input("Видалити усі рядки з цієї таблиці? у/п? ")
-        if confirm_update.lower() == 'y':
+    try:
+        columns = table.columns.keys()
+        print("Доступні колонки для видалення: ")
+        for idx, column in enumerate(columns, start=1):
+            print(f"{idx}.{column}")
+        selected_column_idx = int(input("Введіть номер колонки для умови видалення: "))
+
+        if 1 <= selected_column_idx <= len(columns):
+            condition_column = columns[selected_column_idx - 1]
+        else:
+            print("Невірний номер колонки! Видалення відмінено!")
+
+        condition_value = input(f"Введіть значення для умови, {condition_column}: ")
+
+        confirm_delete = input("Видалити усі рядки з цієї таблиці? у/п? ")
+        if confirm_delete.lower() == 'y':
             query = delete(table).where(getattr(table.c, condition_column) == condition_value)
             conn.execute(query)
             conn.commit()
 
+            print("Рядки успішно видалено!")
+    except SQLAlchemyError as e:
+        print(f"Помилка при видаленні рядків: {e}")
+
+def display_all_rows(table):
+    try:
+        query = select(table)
+        result = conn.execute(query).fetchall()
+
+        print(f"\nУсі рядки у таблиці {table.name}:\n")
+        for row in result:
+            print(row)
+    except SQLAlchemyError as e:
+        print(f"Помилка при виведенні усіх рядків: {e}")
+
 while True:
-    print("Оберіть таблицю: ")
+    print("\nОберіть таблицю: ")
     for table_name in metadata.tables.keys():
         print(table_name)
-    table_name = input("Введіть назву таблиці або 0, щоб вийти ")
+    table_name = input("Введіть назву таблиці або 0, щоб вийти: ")
     if table_name == '0':
         break
-    # перевіримо, чи існує таблиця
+    # Перевіримо, чи існує таблиця
     if table_name in metadata.tables:
         table = metadata.tables[table_name]
         print(f"Ви обрали таблицю {table_name}")
@@ -97,6 +123,7 @@ while True:
         print("1. Вставити рядки")
         print("2. Оновити рядки")
         print("3. Видалити рядки")
+        print("4. Переглянути всі рядки")
         print("0. Вийти")
 
         choice = input("Оберіть опцію: ")
@@ -107,6 +134,8 @@ while True:
             update_rows(table)
         elif choice == "3":
             delete_rows(table)
+        elif choice == "4":
+            display_all_rows(table)
         elif choice == "0":
             break
         else:
