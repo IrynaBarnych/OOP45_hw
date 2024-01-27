@@ -92,6 +92,15 @@ max_amount = session.query(query).scalar()
 print(f"Максимальна сума угоди: {max_amount}")
 
 
+# Запит для витягування мінімальної суми угоди
+min_amount_query = func.min(Sale.amount)
+min_amount = session.query(min_amount_query).scalar()
+
+
+
+
+# Виведення результату
+print(f"Мінімальна сума угоди: {min_amount}")
 
 
 # Залишаємо консоль відкритою, очікуючи введення користувача
