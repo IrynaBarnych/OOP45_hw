@@ -1,9 +1,14 @@
-from sqlalchemy import create_engine, Column, Integer, String, Sequence, Date, ForeignKey
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship
-from sqlalchemy import select
-import json
-from sqlalchemy import func
+# Завдання 2
+# Додайте механізми для оновлення, видалення та вставки
+# даних до бази даних за допомогою інтерфейсу меню. Користувач не може ввести запити INSERT, UPDATE, DELETE
+# безпосередньо. Забороніть можливість оновлення та видалення
+# усіх даних для кожної таблиці (UPDATE та DELETE без умов).
 
+from sqlalchemy import create_engine, MetaData, Table, insert, update, delete, select
+from sqlalchemy.sql import text
+from sqlalchemy.exc import SQLAlchemyError
+import json
+from datetime import datetime
 
 # Зчитування конфігураційних даних з файлу
 with open('config.json') as f:
@@ -13,208 +18,127 @@ with open('config.json') as f:
 db_user = config['user']
 db_password = config['password']
 
-# З'єднання з базою даних
-db_url = f'postgresql+psycopg2://{db_user}:{db_password}@localhost:5432/Sales'
+db_url = f'postgresql+psycopg2://{db_user}:{db_password}@localhost:5432/Hospital'
 engine = create_engine(db_url)
+# З'єднання з БД
+conn = engine.connect()
+metadata = MetaData()
+# Завантаження таблиць
+metadata.reflect(bind=engine)
 
-# Оголошення базового класу
-Base = declarative_base()
+def insert_row(table):
+    try:
+        columns = table.columns.keys()
 
-# Оголошення моделі для таблиці Sales
-class Sale(Base):
-    __tablename__ = 'sales'
+        values = {}
+        for col in columns:
+            value = input(f"Введіть значення для колонки {col}: ")
+            values[col] = value
 
-    id = Column(Integer, Sequence('sale_id_seq'), primary_key=True)
-    amount = Column(Integer)
-    date = Column(Date)
-    salesman_id = Column(Integer, ForeignKey('salesmen.id'))
-    customer_id = Column(Integer, ForeignKey('customers.id'))
+        query = insert(table).values(values)
+        conn.execute(query)
+        conn.commit()
 
-# Оголошення моделі для таблиці Salesmen
-class Salesman(Base):
-    __tablename__ = 'salesmen'
+        print("Рядок успішно додано!")
+    except SQLAlchemyError as e:
+        print(f"Помилка при вставці рядка: {e}")
 
-    id = Column(Integer, Sequence('salesman_id_seq'), primary_key=True)
-    name = Column(String(50))
-    contact_number = Column(String(15))
-    sales = relationship('Sale', back_populates='salesman')
+def update_rows(table):
+    try:
+        columns = table.columns.keys()
+        print("Доступні колонки для оновлення: ")
+        for idx, column in enumerate(columns, start=1):
+            print(f"{idx}.{column}")
+        selected_column_idx = int(input("Введіть номер колонки для оновлення: "))
 
-# Оголошення моделі для таблиці Customers
-class Customer(Base):
-    __tablename__ = 'customers'
+        if 1 <= selected_column_idx <= len(columns):
+            condition_column = columns[selected_column_idx - 1]
+        else:
+            print("Невірний номер колонки!")
 
-    id = Column(Integer, Sequence('customer_id_seq'), primary_key=True)
-    name = Column(String(50))
-    email = Column(String(50))
-    address = Column(String(100))
-    sales = relationship('Sale', back_populates='customer')
+        condition_value = input(f"Введіть значення для умови, {condition_column}: ")
+        new_values = {}
+        for column in columns:
+            value = input(f"Введіть значення для колонки {column}: ")
+            new_values[column] = value
 
-# Встановлення зв'язку між Sale та Salesman/Customer
-Sale.salesman = relationship('Salesman', back_populates='sales')
-Sale.customer = relationship('Customer', back_populates='sales')
+        confirm_update = input("Оновити усі рядки? у/п? ")
+        if confirm_update.lower() == 'y':
+            query = update(table).where(getattr(table.c, condition_column) == condition_value).values(new_values)
+            conn.execute(query)
+            conn.commit()
 
-# Створення таблиць у базі даних
-Base.metadata.create_all(engine)
+            print("Рядки успішно оновлено!")
+    except SQLAlchemyError as e:
+        print(f"Помилка при оновленні рядків: {e}")
 
-# Створення сесії для взаємодії з базою даних
-Session = sessionmaker(bind=engine)
-session = Session()
+def delete_rows(table):
+    try:
+        columns = table.columns.keys()
+        print("Доступні колонки для видалення: ")
+        for idx, column in enumerate(columns, start=1):
+            print(f"{idx}.{column}")
+        selected_column_idx = int(input("Введіть номер колонки для умови видалення: "))
 
-# Запит для витягування усіх угод
-query = select(Sale)
-result = session.execute(query).fetchall()
+        if 1 <= selected_column_idx <= len(columns):
+            condition_column = columns[selected_column_idx - 1]
+        else:
+            print("Невірний номер колонки! Видалення відмінено!")
 
-# Виведення результатів
-for sale in result:
-    print(f"ID: {sale.id}, Amount: {sale.amount}, Date: {sale.date}, Salesman ID: {sale.salesman_id}, "
-          f"Customer ID: {sale.customer_id}")
+        condition_value = input(f"Введіть значення для умови, {condition_column}: ")
 
-# Закриття сесії
-session.close()
+        confirm_delete = input("Видалити усі рядки з цієї таблиці? у/п? ")
+        if confirm_delete.lower() == 'y':
+            query = delete(table).where(getattr(table.c, condition_column) == condition_value)
+            conn.execute(query)
+            conn.commit()
 
-# Ідентифікатор конкретного продавця
-specific_salesman_id = 1  # Замініть на ідентифікатор продавця, якого ви шукаєте
+            print("Рядки успішно видалено!")
+    except SQLAlchemyError as e:
+        print(f"Помилка при видаленні рядків: {e}")
 
-# Запит для витягування угод конкретного продавця
-query = select(Sale).where(Sale.salesman_id == specific_salesman_id)
-result = session.execute(query).fetchall()
+def display_all_rows(table):
+    try:
+        query = select(table)
+        result = conn.execute(query).fetchall()
 
-# Виведення результатів
-for sale in result:
-    print(f"ID: {sale.id}, Amount: {sale.amount}, Date: {sale.date}, Salesman ID: {sale.salesman_id}, "
-          f"Customer ID: {sale.customer_id}")
+        print(f"\nУсі рядки у таблиці {table.name}:\n")
+        for row in result:
+            print(row)
+    except SQLAlchemyError as e:
+        print(f"Помилка при виведенні усіх рядків: {e}")
 
-# Запит для витягування максимальної суми угоди
-query = func.max(Sale.amount)
-max_amount = session.query(query).scalar()
+while True:
+    print("\nОберіть таблицю: ")
+    for table_name in metadata.tables.keys():
+        print(table_name)
+    table_name = input("Введіть назву таблиці або 0, щоб вийти: ")
+    if table_name == '0':
+        break
+    # Перевіримо, чи існує таблиця
+    if table_name in metadata.tables:
+        table = metadata.tables[table_name]
+        print(f"Ви обрали таблицю {table_name}")
 
-# Виведення результату
-print(f"Максимальна сума угоди: {max_amount}")
+        print("1. Вставити рядки")
+        print("2. Оновити рядки")
+        print("3. Видалити рядки")
+        print("4. Переглянути всі рядки")
+        print("0. Вийти")
 
+        choice = input("Оберіть опцію: ")
 
-# Запит для витягування мінімальної суми угоди
-min_amount_query = func.min(Sale.amount)
-min_amount = session.query(min_amount_query).scalar()
-# Виведення результату
-print(f"Мінімальна сума угоди: {min_amount}")
-
-
-# Ідентифікатор конкретного продавця
-specific_salesman_id = 1  # Замініть на ідентифікатор продавця, якого ви шукаєте
-
-# Запит для витягування максимальної суми угоди для конкретного продавця
-max_amount_query = func.max(Sale.amount).filter(Sale.salesman_id == specific_salesman_id)
-max_amount = session.query(max_amount_query).scalar()
-
-# Виведення результату
-print(f"Максимальна сума угоди для продавця з ID {specific_salesman_id}: {max_amount}")
-
-
-# Ідентифікатор конкретного продавця
-specific_salesman_id = 1  # Замініть на ідентифікатор продавця, якого ви шукаєте
-
-# Запит для витягування мінімальної суми угоди для конкретного продавця
-min_amount_query = func.min(Sale.amount).filter(Sale.salesman_id == specific_salesman_id)
-min_amount = session.query(min_amount_query).scalar()
-
-# Виведення результату
-print(f"Мінімальна сума угоди для продавця з ID {specific_salesman_id}: {min_amount}")
-
-
-# Ідентифікатор конкретного покупця
-specific_customer_id = 1  # Замініть на ідентифікатор покупця, якого ви шукаєте
-
-from sqlalchemy import func
-
-# Запит для витягування ID продавця з максимальною сумою продажів
-max_salesman_query = session.query(Sale.salesman_id, func.sum(Sale.amount).label('total_sales')) \
-    .group_by(Sale.salesman_id) \
-    .order_by(func.sum(Sale.amount).desc()) \
-    .limit(1)
-
-# Виконання запиту та отримання результату
-max_salesman_result = max_salesman_query.first()
-
-if max_salesman_result:
-    max_salesman_id, total_sales = max_salesman_result
-    print(f"Продавець з максимальною сумою продажів (ID {max_salesman_id}): {total_sales}")
-else:
-    print("Інформація не знайдена.")
-
-# Виведення результату
-print(f"Максимальна сума угоди для покупця з ID {specific_customer_id}: {max_amount}")
-
-from sqlalchemy import func
-
-# Запит для витягування ID продавця з мінімальною сумою продажів
-min_salesman_query = session.query(Sale.salesman_id, func.sum(Sale.amount).label('total_sales')) \
-    .group_by(Sale.salesman_id) \
-    .order_by(func.sum(Sale.amount).asc()) \
-    .limit(1)
-
-# Виконання запиту та отримання результату
-min_salesman_result = min_salesman_query.first()
-
-if min_salesman_result:
-    min_salesman_id, total_sales = min_salesman_result
-    print(f"Продавець з мінімальною сумою продажів (ID {min_salesman_id}): {total_sales}")
-else:
-    print("Інформація не знайдена.")
-
-from sqlalchemy import func
-
-# Запит для витягування ID покупця з максимальною сумою покупок
-max_customer_query = session.query(Sale.customer_id, func.sum(Sale.amount).label('total_purchases')) \
-    .group_by(Sale.customer_id) \
-    .order_by(func.sum(Sale.amount).desc()) \
-    .limit(1)
-
-# Виконання запиту та отримання результату
-max_customer_result = max_customer_query.first()
-
-if max_customer_result:
-    max_customer_id, total_purchases = max_customer_result
-    print(f"Покупець з максимальною сумою покупок (ID {max_customer_id}): {total_purchases}")
-else:
-    print("Інформація не знайдена.")
-
-from sqlalchemy import func
-
-# Ідентифікатор конкретного покупця
-specific_customer_id = 1  # Замініть на ідентифікатор покупця, для якого ви шукаєте середню суму покупок
-
-# Запит для витягування середньої суми покупок для конкретного покупця
-avg_purchase_query = session.query(func.avg(Sale.amount).label('avg_purchase')) \
-    .filter(Sale.customer_id == specific_customer_id)
-
-# Виконання запиту та отримання результату
-avg_purchase_result = avg_purchase_query.first()
-
-if avg_purchase_result:
-    avg_purchase = avg_purchase_result[0]
-    print(f"Середня сума покупок для покупця (ID {specific_customer_id}): {avg_purchase}")
-else:
-    print("Інформація не знайдена.")
-
-from sqlalchemy import func
-
-# Ідентифікатор конкретного продавця
-specific_salesman_id = 1  # Замініть на ідентифікатор продавця, для якого ви шукаєте середню суму покупок
-
-# Запит для витягування середньої суми покупок для конкретного продавця
-avg_purchase_query = session.query(func.avg(Sale.amount).label('avg_purchase')) \
-    .filter(Sale.salesman_id == specific_salesman_id)
-
-# Виконання запиту та отримання результату
-avg_purchase_result = avg_purchase_query.first()
-
-if avg_purchase_result:
-    avg_purchase = avg_purchase_result[0]
-    print(f"Середня сума покупок для продавця (ID {specific_salesman_id}): {avg_purchase}")
-else:
-    print("Інформація не знайдена.")
-
-
-# Залишаємо консоль відкритою, очікуючи введення користувача
-input("Натисніть Enter для завершення...")
-
+        if choice == "1":
+            insert_row(table)
+        elif choice == "2":
+            update_rows(table)
+        elif choice == "3":
+            delete_rows(table)
+        elif choice == "4":
+            display_all_rows(table)
+        elif choice == "0":
+            break
+        else:
+            print("Невірний вибір. Будь ласка, оберіть знову.")
+    else:
+        print("Такої таблиці не існує. Будь ласка, введіть правильну назву.")
