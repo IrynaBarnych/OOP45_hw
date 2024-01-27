@@ -144,6 +144,22 @@ else:
 # Виведення результату
 print(f"Максимальна сума угоди для покупця з ID {specific_customer_id}: {max_amount}")
 
+from sqlalchemy import func
+
+# Запит для витягування ID продавця з мінімальною сумою продажів
+min_salesman_query = session.query(Sale.salesman_id, func.sum(Sale.amount).label('total_sales')) \
+    .group_by(Sale.salesman_id) \
+    .order_by(func.sum(Sale.amount).asc()) \
+    .limit(1)
+
+# Виконання запиту та отримання результату
+min_salesman_result = min_salesman_query.first()
+
+if min_salesman_result:
+    min_salesman_id, total_sales = min_salesman_result
+    print(f"Продавець з мінімальною сумою продажів (ID {min_salesman_id}): {total_sales}")
+else:
+    print("Інформація не знайдена.")
 
 
 # Залишаємо консоль відкритою, очікуючи введення користувача
