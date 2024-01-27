@@ -2,6 +2,8 @@ from sqlalchemy import create_engine, Column, Integer, String, Sequence, Date, F
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 from sqlalchemy import select
 import json
+from sqlalchemy import func
+
 
 # Зчитування конфігураційних даних з файлу
 with open('config.json') as f:
@@ -81,6 +83,15 @@ result = session.execute(query).fetchall()
 for sale in result:
     print(f"ID: {sale.id}, Amount: {sale.amount}, Date: {sale.date}, Salesman ID: {sale.salesman_id}, "
           f"Customer ID: {sale.customer_id}")
+
+# Запит для витягування максимальної суми угоди
+query = func.max(Sale.amount)
+max_amount = session.query(query).scalar()
+
+# Виведення результату
+print(f"Максимальна сума угоди: {max_amount}")
+
+
 
 
 # Залишаємо консоль відкритою, очікуючи введення користувача
