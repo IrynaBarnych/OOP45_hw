@@ -131,6 +131,15 @@ max_amount = session.query(max_amount_query).scalar()
 # Виведення результату
 print(f"Максимальна сума угоди для покупця з ID {specific_customer_id}: {max_amount}")
 
+# Ідентифікатор конкретного покупця
+specific_customer_id = 1  # Замініть на ідентифікатор покупця, якого ви шукаєте
+
+# Запит для витягування мінімальної суми угоди для конкретного покупця
+min_amount_query = func.min(Sale.amount).filter(Sale.customer_id == specific_customer_id)
+min_amount = session.query(min_amount_query).scalar()
+
+# Виведення результату
+print(f"Мінімальна сума угоди для покупця з ID {specific_customer_id}: {min_amount}")
 
 
 
